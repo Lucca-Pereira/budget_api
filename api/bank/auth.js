@@ -25,7 +25,6 @@ module.exports = async function handler(req, res) {
     client_id: clientId,
     scope: 'info accounts balance transactions offline_access',
     redirect_uri: redirectUri,
-    providers: 'es-ob-sabadell',
   });
 
   const authUrl = `https://auth.truelayer.com/?${params.toString()}`;
