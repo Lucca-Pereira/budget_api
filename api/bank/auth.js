@@ -25,6 +25,7 @@ module.exports = async function handler(req, res) {
     client_id: clientId,
     scope: 'accounts balance transactions offline_access',
     providers: 'mock',
+    response_mode: 'form_post',
     redirect_uri: redirectUri,
   });
 
