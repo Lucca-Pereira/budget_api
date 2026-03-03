@@ -73,7 +73,7 @@ module.exports = function handler(req, res) {
   <p>We may update this Privacy Policy from time to time. We will notify users of significant changes through the app. Continued use of the app after changes constitutes acceptance of the updated policy.</p>
 
   <h2>9. Contact</h2>
-  <p>If you have any questions about this Privacy Policy, please contact us at: <a href="mailto:support@piggybudget.app">support@piggybudget.app</a></p>
+  <p>If you have any questions about this Privacy Policy, please contact us at: <a href="mailto:chumberagpt@gmail.com">chumberagpt@gmail.com</a></p>
 </body>
 </html>`);
 };

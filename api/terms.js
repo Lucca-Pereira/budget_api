@@ -73,7 +73,7 @@ module.exports = function handler(req, res) {
   <p>These Terms are governed by the laws of Spain. Any disputes shall be resolved in the courts of Spain.</p>
 
   <h2>11. Contact</h2>
-  <p>If you have any questions about these Terms, please contact us at: <a href="mailto:support@piggybudget.app">support@piggybudget.app</a></p>
+  <p>If you have any questions about these Terms, please contact us at: <a href="mailto:chumberagpt@gmail.com">chumberagpt@gmail.com</a></p>
 </body>
 </html>`);
 };
