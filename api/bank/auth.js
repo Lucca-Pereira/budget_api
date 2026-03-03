@@ -27,6 +27,9 @@ module.exports = async function handler(req, res) {
     redirect_uri: redirectUri,
   });
 
-  const authUrl = `https://auth.truelayer.com/?${params.toString()}`;
+  // Sandbox uses auth.truelayer-sandbox.com, live uses auth.truelayer.com
+  const isSandbox = clientId.startsWith('sandbox-');
+  const authBase = isSandbox ? 'https://auth.truelayer-sandbox.com' : 'https://auth.truelayer.com';
+  const authUrl = `${authBase}/?${params.toString()}`;
   return res.status(200).json({authUrl});
 };

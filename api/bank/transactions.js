@@ -19,8 +19,12 @@ module.exports = async function handler(req, res) {
   const accessToken = authHeader.split(' ')[1];
 
   try {
-    // 1. Get accounts
-    const accountsRes = await fetch('https://api.truelayer.com/data/v1/accounts', {
+    // 1. Get accounts (sandbox vs live)
+    const clientId = process.env.TRUELAYER_CLIENT_ID ?? '';
+    const isSandbox = clientId.startsWith('sandbox-');
+    const apiBase = isSandbox ? 'https://api.truelayer-sandbox.com' : 'https://api.truelayer.com';
+
+    const accountsRes = await fetch(`${apiBase}/data/v1/accounts`, {
       headers: {Authorization: `Bearer ${accessToken}`},
     });
 
@@ -46,7 +50,7 @@ module.exports = async function handler(req, res) {
 
     for (const account of accounts) {
       const txRes = await fetch(
-        `https://api.truelayer.com/data/v1/accounts/${account.account_id}/transactions?from=${fromStr}&to=${toStr}`,
+        `${apiBase}/data/v1/accounts/${account.account_id}/transactions?from=${fromStr}&to=${toStr}`,
         {headers: {Authorization: `Bearer ${accessToken}`}},
       );
 

@@ -29,8 +29,11 @@ module.exports = async function handler(req, res) {
   const redirectUri = process.env.TRUELAYER_REDIRECT_URI;
 
   try {
-    // Exchange code for tokens
-    const tokenRes = await fetch('https://auth.truelayer.com/connect/token', {
+    // Exchange code for tokens (sandbox vs live)
+    const clientId = process.env.TRUELAYER_CLIENT_ID ?? '';
+    const isSandbox = clientId.startsWith('sandbox-');
+    const tokenBase = isSandbox ? 'https://auth.truelayer-sandbox.com' : 'https://auth.truelayer.com';
+    const tokenRes = await fetch(`${tokenBase}/connect/token`, {
       method: 'POST',
       headers: {'Content-Type': 'application/x-www-form-urlencoded'},
       body: new URLSearchParams({
