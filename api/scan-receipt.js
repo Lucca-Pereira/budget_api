@@ -11,7 +11,7 @@
 
 const {GoogleGenerativeAI} = require('@google/generative-ai');
 
-const MODEL = 'gemini-2.0-flash';
+const MODEL = 'gemini-1.5-flash';
 
 module.exports = async function handler(req, res) {
   // Handle CORS preflight
