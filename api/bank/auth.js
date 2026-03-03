@@ -23,7 +23,8 @@ module.exports = async function handler(req, res) {
   const params = new URLSearchParams({
     response_type: 'code',
     client_id: clientId,
-    scope: 'accounts balance transactions',
+    scope: 'accounts balance transactions offline_access',
+    providers: 'mock',
     redirect_uri: redirectUri,
   });
 
