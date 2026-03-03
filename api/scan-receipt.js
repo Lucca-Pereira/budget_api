@@ -9,36 +9,17 @@
  *   GEMINI_API_KEY — set this in Vercel project settings, never in code
  */
 
-const {GoogleGenerativeAI} = require('@google/generative-ai');
-
-const MODEL = 'gemini-1.5-flash-latest';
-
 module.exports = async function handler(req, res) {
-  // Handle CORS preflight
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-
-  if (req.method !== 'POST') {
-    return res.status(405).json({error: 'Method not allowed'});
-  }
+  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (req.method !== 'POST') return res.status(405).json({error: 'Method not allowed'});
 
   const {image, mediaType, categories} = req.body ?? {};
-
-  if (!image || !categories) {
-    return res.status(400).json({error: 'Missing image or categories'});
-  }
+  if (!image || !categories) return res.status(400).json({error: 'Missing image or categories'});
 
   const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    return res.status(500).json({error: 'Server misconfigured — missing API key'});
-  }
+  if (!apiKey) return res.status(500).json({error: 'Server misconfigured — missing API key'});
 
-  try {
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({model: MODEL});
-
-    const prompt = `You are a receipt scanning assistant for a budget tracking app called PiggyBudget.
+  const prompt = `You are a receipt scanning assistant for a budget tracking app called PiggyBudget.
 Extract all line items from this receipt image and match them to the user's budget categories.
 
 The user's categories are:
@@ -69,17 +50,42 @@ JSON shape:
   "total": number | null
 }`;
 
-    const result = await model.generateContent([
-      {
-        inlineData: {
-          mimeType: mediaType ?? 'image/jpeg',
-          data: image,
-        },
-      },
-      prompt,
-    ]);
+  try {
+    const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
-    const raw = result.response.text();
+    const body = {
+      contents: [
+        {
+          parts: [
+            {
+              inline_data: {
+                mime_type: mediaType ?? 'image/jpeg',
+                data: image,
+              },
+            },
+            {text: prompt},
+          ],
+        },
+      ],
+      generationConfig: {
+        temperature: 0.1,
+        maxOutputTokens: 1024,
+      },
+    };
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(JSON.stringify(err));
+    }
+
+    const data = await response.json();
+    const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
     const clean = raw.replace(/```json|```/g, '').trim();
     const parsed = JSON.parse(clean);
 
@@ -87,8 +93,6 @@ JSON shape:
 
   } catch (err) {
     console.error('scan-receipt error:', err);
-    return res.status(500).json({
-      error: err?.message ?? 'Failed to scan receipt',
-    });
+    return res.status(500).json({error: err?.message ?? 'Failed to scan receipt'});
   }
 };
