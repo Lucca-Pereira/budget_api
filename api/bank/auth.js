@@ -22,6 +22,9 @@ module.exports = async function handler(req, res) {
   const clientId   = process.env.TRUELAYER_CLIENT_ID;
   const redirectUri = process.env.TRUELAYER_REDIRECT_URI;
 
+  const cancelUri = process.env.TRUELAYER_CANCEL_URI
+    ?? `${redirectUri.replace('/callback', '/cancel')}`;
+
   if (!clientId || !redirectUri) {
     return res.status(500).json({error: 'Server misconfigured — missing TRUELAYER_CLIENT_ID or TRUELAYER_REDIRECT_URI'});
   }
@@ -34,7 +37,8 @@ module.exports = async function handler(req, res) {
     client_id:     clientId,
     scope:         'info accounts balance transactions cards offline_access',
     redirect_uri:  redirectUri,
-    providers:     'es-ob-all es-oauth-all',
+    cancel_uri:    cancelUri,
+    providers:     'es-ob-all es-oauth-all es-xs2a-all',
   });
 
   const authUrl = `https://auth.truelayer.com/?${params.toString()}`;
