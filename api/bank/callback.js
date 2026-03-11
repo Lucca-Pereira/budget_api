@@ -1,8 +1,12 @@
 /**
  * api/bank/callback.js
  *
- * TrueLayer redirects here after the user logs in with their bank.
- * Exchanges the auth code for tokens and returns them to the app.
+ * TrueLayer redirects here after the user authenticates with their bank.
+ * TrueLayer appends ?code=<auth_code> to the redirect URI.
+ *
+ * This endpoint:
+ *   1. Exchanges the code for access_token + refresh_token
+ *   2. Passes both back to the app via deep link
  *
  * Environment variables required:
  *   TRUELAYER_CLIENT_ID
@@ -13,55 +17,61 @@
 module.exports = async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  const {code, error} = req.query;
+  const {code, error, error_description} = req.query;
 
   if (error) {
-    // Redirect back to app with error
-    return res.redirect(302, `piggybudget://bank/callback?error=${error}`);
+    const message = error_description ?? error;
+    console.error('TrueLayer callback error:', message);
+    return res.redirect(302, `piggybudget://bank/callback?error=${encodeURIComponent(message)}`);
   }
 
   if (!code) {
-    return res.status(400).json({error: 'Missing auth code'});
+    return res.redirect(302, `piggybudget://bank/callback?error=${encodeURIComponent('Missing authorisation code')}`);
   }
 
-  const clientId = process.env.TRUELAYER_CLIENT_ID;
+  const clientId     = process.env.TRUELAYER_CLIENT_ID;
   const clientSecret = process.env.TRUELAYER_CLIENT_SECRET;
-  const redirectUri = process.env.TRUELAYER_REDIRECT_URI;
+  const redirectUri  = process.env.TRUELAYER_REDIRECT_URI;
+
+  if (!clientId || !clientSecret || !redirectUri) {
+    return res.redirect(302, `piggybudget://bank/callback?error=${encodeURIComponent('Server misconfigured')}`);
+  }
 
   try {
-    // Exchange code for tokens (sandbox vs live)
-    const clientId = process.env.TRUELAYER_CLIENT_ID ?? '';
-    const isSandbox = clientId.startsWith('sandbox-');
-    const tokenBase = isSandbox ? 'https://auth.truelayer-sandbox.com' : 'https://auth.truelayer.com';
-    const tokenRes = await fetch(`${tokenBase}/connect/token`, {
+    // Exchange authorisation code for tokens
+    const tokenRes = await fetch('https://auth.truelayer.com/connect/token', {
       method: 'POST',
       headers: {'Content-Type': 'application/x-www-form-urlencoded'},
       body: new URLSearchParams({
-        grant_type: 'authorization_code',
-        client_id: clientId,
+        grant_type:    'authorization_code',
+        client_id:     clientId,
         client_secret: clientSecret,
-        redirect_uri: redirectUri,
+        redirect_uri:  redirectUri,
         code,
-      }),
+      }).toString(),
     });
 
     if (!tokenRes.ok) {
-      const err = await tokenRes.json().catch(() => ({}));
-      throw new Error(err?.error_description ?? 'Token exchange failed');
+      const body = await tokenRes.text().catch(() => 'no body');
+      console.error('TrueLayer token exchange failed:', tokenRes.status, body);
+      return res.redirect(302, `piggybudget://bank/callback?error=${encodeURIComponent('Token exchange failed')}`);
     }
 
     const tokens = await tokenRes.json();
+    const {access_token, refresh_token} = tokens;
 
-    // Redirect back to app with tokens
-    const params = new URLSearchParams({
-      access_token: tokens.access_token,
-      refresh_token: tokens.refresh_token ?? '',
-    });
+    if (!access_token) {
+      return res.redirect(302, `piggybudget://bank/callback?error=${encodeURIComponent('No access token returned')}`);
+    }
+
+    // Pass tokens back to app via deep link
+    const params = new URLSearchParams({access_token});
+    if (refresh_token) params.set('refresh_token', refresh_token);
 
     return res.redirect(302, `piggybudget://bank/callback?${params.toString()}`);
 
   } catch (err) {
     console.error('bank/callback error:', err);
-    return res.redirect(302, `piggybudget://bank/callback?error=${encodeURIComponent(err.message)}`);
+    return res.redirect(302, `piggybudget://bank/callback?error=${encodeURIComponent('Callback failed')}`);
   }
 };
