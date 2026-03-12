@@ -77,7 +77,6 @@ module.exports = async function handler(req, res) {
       generationConfig: {
         temperature: 0.1,
         maxOutputTokens: 8192,
-        responseMimeType: 'application/json',
       },
     };
 
@@ -98,7 +97,8 @@ module.exports = async function handler(req, res) {
 
     console.log('[scan-receipt] finishReason:', finishReason);
     console.log('[scan-receipt] raw length:', raw.length);
-    console.log('[scan-receipt] raw:', raw.slice(0, 500));
+    console.log('[scan-receipt] raw FULL:', raw);
+    console.log('[scan-receipt] categories sent:', JSON.stringify(categoryList));
 
     if (!raw) {
       console.error('[scan-receipt] empty response:', JSON.stringify(data));
