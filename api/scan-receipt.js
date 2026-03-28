@@ -92,13 +92,7 @@ module.exports = async function handler(req, res) {
     }
 
     const data = await response.json();
-    const finishReason = data?.candidates?.[0]?.finishReason;
     const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
-
-    console.log('[scan-receipt] finishReason:', finishReason);
-    console.log('[scan-receipt] raw length:', raw.length);
-    console.log('[scan-receipt] raw FULL:', raw);
-    console.log('[scan-receipt] categories sent:', JSON.stringify(categoryList));
 
     if (!raw) {
       console.error('[scan-receipt] empty response:', JSON.stringify(data));

@@ -35,34 +35,33 @@ module.exports = async function handler(req, res) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return res.status(500).json({error: 'Server misconfigured — missing GEMINI_API_KEY'});
 
-  const prompt = `You are a personal finance assistant for a budget tracking app called PiggyBudget.
-Assign each bank transaction below to the most appropriate category from the user's category list.
+  const categoryList = categories.map(c => ({
+    id: c.id, name: c.name,
+    subs: (c.subCategories ?? []).map(s => ({id: s.id, name: s.name})),
+  }));
 
-The user's categories are:
-${JSON.stringify(categories, null, 2)}
+  const txList = transactions.map(t => ({
+    id: t.id,
+    merchant: t.merchantName ?? t.description,
+    bankCategory: t.bankCategory ?? null,
+  }));
 
-The transactions to categorise are:
-${JSON.stringify(transactions.map(t => ({id: t.id, merchant: t.merchantName, description: t.description, amount: t.amount, bankCategory: t.bankCategory ?? null})), null, 2)}
+  const prompt = `You are a personal finance assistant. Assign each bank transaction to the best matching budget category.
+
+CATEGORIES (copy ids exactly):
+${JSON.stringify(categoryList)}
+
+TRANSACTIONS:
+${JSON.stringify(txList)}
 
 Rules:
-- Match each transaction to the most appropriate categoryId from the list
-- If a subcategory fits better, also set subCategoryId
-- If no category fits at all, set categoryId to null
-- Base your decision on the merchant name and description
-- The bankCategory field is a hint from the bank (e.g. "Groceries", "Entertainment") — use it as supporting evidence but always map to the user's actual category IDs
-- Common examples: supermarkets → Food/Groceries, restaurants → Food/Dining, Netflix/Spotify → Subscriptions, petrol stations → Transport, pharmacies → Health
-- Respond ONLY with valid JSON, no preamble, no markdown fences
+- Use the exact id strings from CATEGORIES
+- Set subCategoryId if a sub fits better, otherwise null
+- If nothing fits, set categoryId to null
+- Common matches: supermarkets=food, restaurants=dining, Netflix/Spotify=subscriptions, petrol=transport, pharmacies=health
+- Reply ONLY with minified JSON, no markdown
 
-JSON shape:
-{
-  "assignments": [
-    {
-      "id": string,
-      "categoryId": string | null,
-      "subCategoryId": string | null
-    }
-  ]
-}`;
+{"assignments":[{"id":"tx-id","categoryId":"cat-id-or-null","subCategoryId":"sub-id-or-null"}]}`;
 
   try {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
