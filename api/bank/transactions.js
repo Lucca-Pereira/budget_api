@@ -3,9 +3,17 @@
  *
  * TrueLayer Data API — fetch transactions using the user's access token.
  *
+ * Fixes applied:
+ *  - #1  Null filter: zero-amount or bad transactions no longer pushed to array
+ *  - #2  Date filter: date_from is respected correctly; defaults to 30 days back
+ *  - #5  Merchant normalisation: consistent name extraction
+ *  - #8  Deduplication: cross-account duplicate txs removed
+ *  - #9  Pending filter: provisional/pending transactions excluded
+ *  - #11 Timezone buffer: date_from gets 1 extra day back to avoid boundary misses
+ *
  * Query parameters:
  *   access_token  (required)
- *   date_from     optional YYYY-MM-DD
+ *   date_from     optional YYYY-MM-DD — if omitted, defaults to 30 days ago
  */
 
 module.exports = async function handler(req, res) {
@@ -22,6 +30,24 @@ module.exports = async function handler(req, res) {
   const headers = {Authorization: `Bearer ${access_token}`, Accept: 'application/json'};
 
   try {
+    // ── Fix #11: Add 1-day buffer to date_from to avoid timezone boundary misses ──
+    const toDate = new Date();
+    toDate.setDate(toDate.getDate() + 1); // include today fully
+    const toStr = toDate.toISOString();
+
+    let fromStr;
+    if (date_from) {
+      // Subtract 1 extra day from the requested date as a boundary buffer
+      const d = new Date(date_from);
+      d.setDate(d.getDate() - 1);
+      fromStr = d.toISOString();
+    } else {
+      // Default: 30 days back
+      const d = new Date();
+      d.setDate(d.getDate() - 30);
+      fromStr = d.toISOString();
+    }
+
     // 1. Fetch accounts
     const accountsRes = await fetch(`${BASE}/accounts`, {headers});
 
@@ -41,13 +67,7 @@ module.exports = async function handler(req, res) {
     const cardsData = cardsRes.ok ? await cardsRes.json() : {results: []};
     const cards = cardsData.results ?? [];
 
-    // Build date query string
-    const toStr   = new Date().toISOString();
-    const fromStr = date_from
-      ? new Date(date_from).toISOString()
-      : (() => { const d = new Date(); d.setDate(d.getDate() - 30); return d.toISOString(); })();
-
-    const allTransactions = [];
+    const rawTransactions = [];
 
     // 2. Fetch transactions for each account
     for (const account of accounts) {
@@ -62,7 +82,13 @@ module.exports = async function handler(req, res) {
       }
       const txData = await txRes.json();
       for (const tx of txData.results ?? []) {
-        allTransactions.push(normaliseTx(tx, account.account_id));
+        // ── Fix #9: Skip pending/provisional transactions ──
+        const status = (tx.transaction_type ?? tx.status ?? '').toLowerCase();
+        if (status === 'pending' || status === 'provisional') continue;
+
+        const normalised = normaliseTx(tx, account.account_id);
+        // ── Fix #1: Skip null entries (zero amount etc) ──
+        if (normalised) rawTransactions.push(normalised);
       }
     }
 
@@ -75,8 +101,28 @@ module.exports = async function handler(req, res) {
       if (!txRes.ok) continue;
       const txData = await txRes.json();
       for (const tx of txData.results ?? []) {
-        allTransactions.push(normaliseTx(tx, card.account_id));
+        const status = (tx.transaction_type ?? tx.status ?? '').toLowerCase();
+        if (status === 'pending' || status === 'provisional') continue;
+
+        const normalised = normaliseTx(tx, card.account_id);
+        if (normalised) rawTransactions.push(normalised);
       }
+    }
+
+    // ── Fix #8: Deduplicate across accounts/cards ──
+    // Primary key: transaction_id if present (most reliable)
+    // Fallback key: type+date+amount+merchantName (catches cross-account dupes)
+    const seen = new Set();
+    const allTransactions = [];
+    for (const tx of rawTransactions) {
+      // Build a dedup key — prefer the real tx ID, fall back to content hash
+      const dedupKey = tx.id.startsWith('fallback-')
+        ? `${tx.type}-${tx.date}-${tx.amount}-${normaliseMerchant(tx.merchantName ?? tx.description)}`
+        : tx.id;
+
+      if (seen.has(dedupKey)) continue;
+      seen.add(dedupKey);
+      allTransactions.push(tx);
     }
 
     // Sort newest first
@@ -91,23 +137,47 @@ module.exports = async function handler(req, res) {
 };
 
 /**
+ * ── Fix #5: Consistent merchant name normalisation ──
+ * Strip noise words, card numbers, and common suffixes that make
+ * the same merchant appear with different names across transactions.
+ */
+function normaliseMerchant(raw) {
+  if (!raw) return '';
+  return raw
+    .toLowerCase()
+    .replace(/\s+\d{4,}\s*/g, ' ')      // remove card/ref numbers
+    .replace(/\s+(s\.?l\.?|s\.?a\.?|ltd|inc|gmbh|sl|sa)\.?\s*$/i, '') // legal suffixes
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
  * Normalise a TrueLayer transaction to PiggyBudget's shape.
+ * Returns null for zero-amount or invalid transactions (Fix #1).
  */
 function normaliseTx(tx, accountId) {
-  // TrueLayer amount: negative = debit (spending), positive = credit
   const rawAmount = typeof tx.amount === 'number' ? tx.amount : parseFloat(tx.amount ?? '0');
-  if (rawAmount === 0) return null;
+
+  // ── Fix #1: Filter zero or invalid amounts ──
+  if (!rawAmount || isNaN(rawAmount)) return null;
 
   const type = rawAmount < 0 ? 'debit' : 'credit';
 
   const date =
     tx.timestamp?.split('T')[0] ??
     tx.booking_date ??
+    tx.value_date ??
     new Date().toISOString().split('T')[0];
 
-  const id =
-    tx.transaction_id ??
-    `${accountId}-${date}-${Math.abs(rawAmount)}-${(tx.description ?? '').slice(0, 8)}`;
+  // ── Fix #2 + #8: More reliable ID — prefer real tx_id, build a stable fallback ──
+  const id = tx.transaction_id
+    ?? `fallback-${accountId}-${date}-${Math.abs(rawAmount).toFixed(2)}-${(tx.description ?? '').slice(0, 12).replace(/\s+/g, '')}`;
+
+  // ── Fix #5: Normalise merchant name consistently ──
+  const rawMerchant = tx.merchant_name || tx.merchant?.name || null;
+  const merchantName = rawMerchant
+    ? rawMerchant.trim()
+    : null;
 
   return {
     id,
@@ -115,7 +185,7 @@ function normaliseTx(tx, accountId) {
     amount: Math.abs(rawAmount),
     type,
     description: tx.description ?? '',
-    merchantName: tx.merchant_name ?? tx.description ?? null,
+    merchantName,
     category: tx.transaction_classification?.[0] ?? null,
     accountId,
   };
