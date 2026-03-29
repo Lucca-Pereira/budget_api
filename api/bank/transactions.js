@@ -31,8 +31,7 @@ module.exports = async function handler(req, res) {
 
   try {
     // ── Fix #11: Add 1-day buffer to date_from to avoid timezone boundary misses ──
-    const toDate = new Date();
-    toDate.setDate(toDate.getDate() + 1); // include today fully
+    const toDate = new Date(); // use current time — TrueLayer rejects future `to` dates
     const toStr = toDate.toISOString();
 
     let fromStr;
