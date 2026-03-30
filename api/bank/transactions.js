@@ -36,10 +36,8 @@ module.exports = async function handler(req, res) {
 
     let fromStr;
     if (date_from) {
-      // Subtract 1 extra day from the requested date as a boundary buffer
-      const d = new Date(date_from);
-      d.setDate(d.getDate() - 1);
-      fromStr = d.toISOString();
+      // Use the date exactly as requested — no offset needed
+      fromStr = new Date(date_from).toISOString();
     } else {
       // Default: 30 days back
       const d = new Date();
