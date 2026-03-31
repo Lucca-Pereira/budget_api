@@ -58,13 +58,11 @@ module.exports = async function handler(req, res) {
 
     const accountsData = await accountsRes.json();
     const accounts = accountsData.results ?? [];
-    console.log(`[transactions] accounts found: ${accounts.length}, fromStr: ${fromStr}, toStr: ${toStr}`);
 
     // Also fetch cards
     const cardsRes = await fetch(`${BASE}/cards`, {headers});
     const cardsData = cardsRes.ok ? await cardsRes.json() : {results: []};
     const cards = cardsData.results ?? [];
-    console.log(`[transactions] cards found: ${cards.length}`);
 
     const rawTransactions = [];
 
@@ -80,7 +78,6 @@ module.exports = async function handler(req, res) {
         continue;
       }
       const txData = await txRes.json();
-      console.log(`[transactions] account ${account.account_id}: ${txData.results?.length ?? 0} transactions`);
       for (const tx of txData.results ?? []) {
         // ── Fix #9: Skip pending/provisional transactions ──
         const status = (tx.transaction_type ?? tx.status ?? '').toLowerCase();
